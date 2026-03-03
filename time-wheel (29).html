@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+<title>Around</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+<style>
+  /* ── Splash Screen ─────────────────────────────────────────────────────── */
+  #splash {
+    position:fixed; inset:0; z-index:9999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:linear-gradient(160deg,#fdf8f2 0%,#f5ede8 55%,#ede8f5 100%);
+    transition:opacity 0.65s ease;
+  }
+  #splash.fade-out { opacity:0; pointer-events:none; }
+  #splash-title {
+    font-family:'Century Gothic','Futura','Trebuchet MS','DM Serif Display',sans-serif;
+    font-size:clamp(2.4rem,8vw,3.8rem);
+    font-weight:400; letter-spacing:0.03em; color:#3a3228; text-align:center;
+    opacity:0; transform:translateY(10px);
+    animation:splashIn 0.75s cubic-bezier(.22,.68,0,1.2) 0.1s forwards;
+  }
+  #splash-sub {
+    margin-top:20px;
+    font-family:'DM Sans',sans-serif;
+    font-size:clamp(0.68rem,2.2vw,0.8rem);
+    font-weight:300; letter-spacing:0.22em; color:#a09488;
+    opacity:0; animation:splashFade 0.6s ease 0.55s forwards;
+  }
+  @keyframes splashIn { to { opacity:1; transform:translateY(0); } }
+  @keyframes splashFade { to { opacity:0.6; } }
+</style>
+<style>
+  :root { --bg:#f5f0e8; --text:#3a3228; --text-light:#8a7e72; --card-bg:#ede8de; --accent:#f7cbd1; }
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:32px 16px; }
+  .brand { text-align:center; margin-bottom:28px; }
+  .brand-zh { font-family:'DM Serif Display',serif; font-size:2.6rem; letter-spacing:0.02em; line-height:1; }
+  .brand-en { font-size:0.7rem; letter-spacing:0.28em; color:var(--text-light); text-transform:uppercase; margin-top:5px; }
+  .brand-sub { font-size:0.74rem; color:var(--text-light); margin-top:8px; display:flex; gap:6px; justify-content:center; }
+  .dst-btn { font-size:0.72rem; font-family:'DM Sans',sans-serif; color:var(--text-light); background:rgba(0,0,0,0.06); border:none; border-radius:20px; padding:4px 12px; cursor:pointer; transition:all 0.2s; }
+  .dst-btn.active { background:var(--accent); color:#fff; }
+  .dst-btn:hover:not(.active) { background:rgba(0,0,0,0.12); }
+  /* DST sliding toggle */
+  .dst-toggle { cursor:pointer; }
+  .dst-track {
+    position:relative; display:flex; align-items:center;
+    background:rgba(0,0,0,0.07); border-radius:20px;
+    padding:2px; gap:0; height:26px; overflow:hidden;
+  }
+  .dst-label {
+    position:relative; z-index:2;
+    font-size:0.72rem; font-family:'DM Sans',sans-serif;
+    padding:0 10px; line-height:22px; border-radius:18px;
+    color:var(--text-light); transition:color 0.25s; white-space:nowrap;
+  }
+  .dst-label.active { color:#fff; }
+  .dst-thumb {
+    position:absolute; top:2px; left:2px;
+    height:22px; border-radius:18px;
+    background:var(--accent);
+    transition:left 0.25s cubic-bezier(.4,0,.2,1), width 0.25s cubic-bezier(.4,0,.2,1);
+    z-index:1;
+  }
+  .main { display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; justify-content:center; width:100%; max-width:980px; }
+  .wheel-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+  #wheel-container { position:relative; cursor:grab; user-select:none; }
+  html, body { overflow-x:hidden; overflow-y:auto; max-width:100vw; touch-action:pan-y; }
+  body { overflow-x:hidden; overflow-y:auto; }
+  #wheel-container:active { cursor:grabbing; }
+  canvas { display:block; max-width:100%; touch-action:pan-y; }
+  @media (max-width: 560px) {
+    #wheel-container { transform-origin: top center; }
+    .wheel-col { width:100%; max-width:275px; }
+    .dial-card { max-width:100% !important; }
+  }
+  .wheel-hint { font-size:0.7rem; color:var(--text-light); text-align:center; margin-top:8px; letter-spacing:0.03em; }
+  .controls { display:flex; flex-direction:column; gap:14px; min-width:230px; max-width:275px; }
+  .section-title { font-family:'DM Serif Display',serif; font-size:1rem; margin-bottom:8px; }
+  .card { background:var(--card-bg); border-radius:16px; padding:16px; }
+  .timezone-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; touch-action:none; }
+  .color-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  .tz-name { flex:1; font-size:0.85rem; font-weight:500; }
+  .tz-offset { font-size:0.75rem; color:var(--text-light); margin-right:4px; }
+  .btn-small { width:22px; height:22px; border-radius:50%; border:none; background:rgba(0,0,0,0.08); cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; }
+  .lock-btn.active { background:rgba(0,0,0,0.18); }
+  .top-icon { display:inline-flex; flex-direction:column; align-items:center; gap:0; }
+  .top-icon::before { content:''; display:block; width:8px; height:1px; background:currentColor; }
+  .top-icon::after { content:'↑'; font-size:11px; line-height:1; }
+  .sleep-row { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
+  .sleep-label { font-size:0.75rem; color:var(--text-light); display:flex; justify-content:space-between; align-items:center; }
+  .sleep-time-badge { font-size:0.78rem; font-weight:500; color:var(--text); }
+  .sleep-emoji { font-size:0.85rem; margin-right:3px; }
+  input[type=range] { width:100%; height:4px; border-radius:2px; outline:none; border:none; cursor:pointer; -webkit-appearance:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--thumb-color,#8a7e72); cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+  .dial-slider::-webkit-slider-thumb { width:10px; height:10px; }
+  input[type=range].wake-slider { background:linear-gradient(to right,#f9c784,#f4a261); --thumb-color:#e07b54; }
+  input[type=range].sleep-slider { background:linear-gradient(to right,#a8c5e8,#7090c0); --thumb-color:#5070a0; }
+  .tz-schedule-block { padding:10px 12px; background:rgba(255,255,255,0.45); border-radius:12px; margin-bottom:8px; }
+  .tz-schedule-block:last-child { margin-bottom:0; }
+  .tz-schedule-header { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .add-tz { display:flex; gap:6px; margin-top:8px; position:relative; }
+  .add-tz input { min-width:0; flex:1; background:rgba(255,255,255,0.5); border:1px solid rgba(0,0,0,0.1); border-radius:8px; padding:5px 8px; font-size:0.78rem; font-family:'DM Sans',sans-serif; color:var(--text); }
+  .add-tz button { flex-shrink:0; background:var(--text); color:var(--bg); border:none; border-radius:8px; padding:5px 12px; font-size:0.78rem; cursor:pointer; font-family:'DM Sans',sans-serif; transition:opacity 0.2s; }
+  .add-tz button:hover { opacity:0.75; }
+  .tz-dropdown { position:absolute; top:100%; left:0; right:36px; background:white; border:1px solid rgba(0,0,0,0.1); border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.12); max-height:180px; overflow-y:auto; z-index:100; display:none; margin-top:4px; }
+  .tz-option { padding:7px 12px; font-size:0.8rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .tz-option:hover { background:rgba(0,0,0,0.05); }
+  .tz-option-name { font-weight:500; }
+  .tz-option-meta { font-size:0.7rem; color:var(--text-light); white-space:nowrap; }
+  .themes { display:flex; gap:8px; flex-wrap:wrap; }
+  .theme-btn { width:32px; height:32px; border-radius:50%; border:2px solid transparent; cursor:pointer; transition:transform 0.2s,border-color 0.2s; display:flex; overflow:hidden; flex-shrink:0; }
+  .theme-btn:hover { transform:scale(1.12); }
+  .theme-btn.active { border-color:var(--text); }
+  .theme-third { width:33.4%; height:100%; }
+  .legend { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .legend-item { display:flex; align-items:center; gap:5px; font-size:0.72rem; color:var(--text-light); }
+  .legend-swatch { width:10px; height:10px; border-radius:50%; }
+  .dial-card { margin-top:12px; padding:14px 16px; width:100%; max-width:275px; }
+  .dial-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .dial-label { font-size:0.65rem; font-weight:600; letter-spacing:0.08em; color:var(--text-light); margin-bottom:3px; }
+  .dial-time { font-family:'DM Serif Display',serif; font-size:1.5rem; color:var(--text); letter-spacing:-0.5px; }
+  .dial-controls { display:flex; gap:8px; align-items:center; }
+  .reset-btn,.toggle-btn { font-size:0.72rem; color:var(--text-light); background:rgba(255,255,255,0.6); border:none; border-radius:8px; padding:5px 10px; cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.2s; white-space:nowrap; }
+  .icon-btn { padding:5px 7px; font-size:0.95rem; line-height:1; background:rgba(255,255,255,0.6); color:var(--text-light); border-radius:8px; border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; transition:background 0.2s; }
+  .reset-btn:hover,.toggle-btn:hover,.icon-btn:hover { background:rgba(255,255,255,0.9); }
+  .toggle-btn.active,.icon-btn.active { background:rgba(255,255,255,0.9); color:var(--text); }
+  .dial-tick { position:absolute; top:50%; transform:translateY(-50%); width:1px; height:7px; background:#b8afa6; border-radius:1px; cursor:pointer; pointer-events:auto; }
+  .dial-tick:hover { background:#8a7e72; }
+  .dial-slider { width:100%; height:2px; border-radius:1px; background:#c8c0b8; --thumb-color:#8a7e72; position:relative; z-index:1; }
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div id="splash-title">We're Around.</div>
+  <div id="splash-sub">我也在地球</div>
+</div>
+
+<div class="brand">
+  <div class="brand-zh">Around</div>
+  <div class="brand-en" id="brand-sub-text">你的时区伴侣</div>
+  <div class="brand-sub">
+    <div class="dst-toggle" id="dst-toggle" onclick="setDST(!isDST)">
+      <div class="dst-track" id="dst-track">
+        <span class="dst-label" id="dst-label-dst">夏令时</span>
+        <span class="dst-label" id="dst-label-std">冬令时</span>
+        <div class="dst-thumb" id="dst-thumb"></div>
+      </div>
+    </div>
+    <button class="dst-btn" id="lang-btn" onclick="toggleLang()">EN</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="wheel-col">
+    <div id="wheel-container">
+      <canvas id="wheel"></canvas>
+    </div>
+    <p class="wheel-hint" id="wheel-hint">↺ 拖动转盘 · 时间实时联动</p>
+    <div class="card dial-card">
+      <div class="dial-header">
+        <div>
+          <div class="dial-label" id="dial-label">指定当前时间</div>
+          <div class="dial-time" id="dial-display" onclick="startTimeEdit()" title="点击输入时间" style="cursor:pointer">--:--</div>
+          <input type="time" id="dial-time-input" style="display:none;font-family:'DM Serif Display',serif;font-size:1.5rem;color:var(--text);border:none;background:transparent;outline:none;letter-spacing:-0.5px;width:90px" onchange="applyTimeInput(this.value)" onblur="endTimeEdit()"/>
+        </div>
+        <div class="dial-controls">
+          <button class="reset-btn" id="reset-btn" onclick="resetToNow()">回到现在</button>
+          <button class="toggle-btn icon-btn active" id="eye-toggle" onclick="toggleOverlay()" title="显示/隐藏时刻">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 3C4.5 3 1.5 8 1.5 8s3 5 6.5 5 6.5-5 6.5-5-3-5-6.5-5zm0 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+              <circle cx="8" cy="8" r="1.5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div style="position:relative;margin-top:4px">
+        <input type="range" id="dial-slider" class="dial-slider" min="0" max="1439" step="1" oninput="onDialChange(this.value)">
+        <span class="dial-tick" style="left:0%"        onclick="snapToHour(0)"></span>
+        <span class="dial-tick" style="left:25%;transform:translate(-50%,-50%)"  onclick="snapToHour(6)"></span>
+        <span class="dial-tick" style="left:50%;transform:translate(-50%,-50%)"  onclick="snapToHour(12)"></span>
+        <span class="dial-tick" style="left:75%;transform:translate(-50%,-50%)"  onclick="snapToHour(18)"></span>
+        <span class="dial-tick" style="right:0%;transform:translateY(-50%)"      onclick="snapToHour(24)"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls-col">
+  </div>
+</div>
+
+<script>
+// ── Themes: 3 clearly distinct colors per palette, varied styles ──────────────
+// ── Accent color helper: blend with white 50% ────────────────────────────────
+function _lightAccent(hex) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  const mix = v => Math.round(v*0.5 + 255*0.5).toString(16).padStart(2,'0');
+  return '#'+mix(r)+mix(g)+mix(b);
+}
+const THEMES = [
+  {name:'春日', p:['#f2a5b0','#a8d5a2','#f9c06a'], bg:'#f5f0e8', card:'#ede8de'},
+  {name:'活力', p:['#f58b05','#7fbbdd','#ffc22f'], bg:'#eef7fc', card:'#dceef8'},  // sky blue + orange + golden yellow
+  {name:'清绿', p:['#2e9e68','#98dab0','#c8d840'], bg:'#f8fce8', card:'#eef5d8'},  // deep sage + mint middle + lime outer
+  {name:'卡其', p:['#d88e36','#c2ccb8','#b25d3f'], bg:'#f7f3eb', card:'#ede6d8'},  // amber + terracotta + sage — Korean autumn
+  {name:'梦幻', p:['#b290ca','#dbeae5','#e4d4db'], bg:'#f4f2f8', card:'#eae6f2'},  // purple + mint mist middle + blush mauve
+  {name:'商务', p:['#333941','#8c3828','#b0b2b3'], bg:'#eceae4', card:'#e2dfd8'},  // pebble + fern + dusk — mindful editorial
+];
+
+let theme = THEMES[0];
+let rotation = 0;
+let showNumbers = true;
+let showWake = true;
+let currentDialMins = 0;
+
+// dst:true = affected by daylight saving (Europe/North America); China stays fixed
+// Base offsets are STANDARD (winter) time
+const BASE_OFFSETS = [
+  {name:'中国 CN',  en:'China',       base:8,  dst:false},
+  {name:'荷兰 NL',  en:'Netherlands', base:1,  dst:true},
+  {name:'美西 PT',  en:'US West',     base:-8, dst:true},
+];
+
+let isDST = true; // default summer
+
+let timezones = BASE_OFFSETS.map(tz => ({
+  name: tz.name,
+  en: tz.en,
+  offset: tz.dst && isDST ? tz.base + 1 : tz.base,
+  dst: tz.dst,
+  baseOffset: tz.base,
+}));
+let schedules = [
+  {wake:7, sleep:23},
+  {wake:7, sleep:23},
+  {wake:7, sleep:23},
+];
+
+const SIZE = 500;
+const CANVAS_H = 420;
+const DPR = window.devicePixelRatio || 1;
+const canvas = document.getElementById('wheel');
+canvas.width = SIZE * DPR;
+canvas.height = CANVAS_H * DPR;
+canvas.style.width = SIZE + 'px';
+canvas.style.height = CANVAS_H + 'px';
+document.getElementById('wheel-container').style.cssText = `width:${SIZE}px;height:${CANVAS_H}px`;
+const ctx = canvas.getContext('2d');
+ctx.scale(DPR, DPR);
+const cx = SIZE/2, cy = CANVAS_H/2 + 30;
+
+function hToAngle(h) { return (h/24)*Math.PI*2 - Math.PI/2; }
+
+function daylightBrightness(h) {
+  if (h >= 8 && h < 17) return 1.0;
+  if (h >= 5 && h < 8)  return 0.76 + (h-5)/3*0.24;
+  if (h >= 17 && h < 20) return 1.0 - (h-17)/3*0.24;
+  return 0.76;
+}
+
+function applyBrightness(hex, factor) {
+  let c = hex.replace('#','');
+  if(c.length===3) c=c.split('').map(x=>x+x).join('');
+  let r=parseInt(c.slice(0,2),16), g=parseInt(c.slice(2,4),16), b=parseInt(c.slice(4,6),16);
+  const dark=40;
+  return `rgb(${Math.round(dark+(r-dark)*factor)},${Math.round(dark+(g-dark)*factor)},${Math.round(dark+(b-dark)*factor)})`;
+}
+
+function drawPetal(innerR, outerR, a0, a1, color) {
+  const midAng=(a0+a1)/2, midR=(innerR+outerR)/2;
+  const thick=outerR-innerR, angSpan=a1-a0;
+  const halfW=outerR*Math.sin(angSpan/2);
+  const cr=Math.min(4, thick*0.28, halfW*0.4);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx,cy,innerR-0.5,a0,a1);
+  ctx.arc(cx,cy,outerR+0.5,a1,a0,true);
+  ctx.closePath();
+  ctx.clip();
+  ctx.translate(cx,cy);
+  ctx.rotate(midAng);
+  ctx.beginPath();
+  ctx.roundRect(innerR, -(midR*angSpan/2+1), thick, midR*angSpan+2, cr);
+  ctx.fillStyle=color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0,0,SIZE,CANVAS_H);
+  const n=timezones.length;
+  const rotRad=rotation*Math.PI/180;
+  const baseInner=22, thick=56, step=thick*0.65;
+  const outermost=baseInner+(n-1)*step+thick;
+  const needleColor=theme.p[0];
+  const needleBot=cy-outermost+2;
+  const needleTop=cy-outermost-38;
+
+  // ── Grey guide line: tapered gradient from just above needle base to center ──
+  const grad = ctx.createLinearGradient(cx, needleBot - 6, cx, cy);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(0.08, 'rgba(0,0,0,0.13)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, needleBot - 6);
+  ctx.lineTo(cx, cy);
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Rings ──
+  for(let i=n-1;i>=0;i--) {
+    const innerR=baseInner+i*step;
+    const outerR=innerR+thick;
+    const schedule=schedules[i]||{wake:7,sleep:23};
+    const color=theme.p[i%theme.p.length];
+    // diff: how many hours ahead this tz is compared to tz[0]
+    const diff=timezones[i].offset-timezones[0].offset;
+    const segGap=0.006;
+
+    for(let h=0;h<24;h++) {
+      // h = angular position = tz[0] local hour
+      // localH = what hour it is in tz[i] at this angular position
+      const localH=((h+diff)%24+24)%24;
+      const isAwake=schedule.wake<=schedule.sleep
+        ?(localH>=schedule.wake&&localH<schedule.sleep)
+        :(localH>=schedule.wake||localH<schedule.sleep);
+      if(!isAwake) continue;
+
+      const isMarker=[0,3,6,9,12,15,18,21].includes(localH);
+      const brightness=daylightBrightness(localH);
+      const segColor=applyBrightness(color,brightness);
+      const a0=hToAngle(h)+rotRad+segGap;
+      const a1=hToAngle(h+1)+rotRad-segGap;
+      drawPetal(innerR, outerR, a0, a1, segColor);
+
+      if(isMarker) {
+        const midAng=(a0+a1)/2;
+        const pr = showNumbers ? outerR - 10 : (innerR+outerR)/2;
+        const px=cx+Math.cos(midAng)*pr, py=cy+Math.sin(midAng)*pr;
+        if(showNumbers) {
+          ctx.save();
+          ctx.font='600 9px DM Sans';
+          ctx.fillStyle='rgba(255,255,255,0.95)';
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillText(localH, px, py);
+          ctx.restore();
+        } else {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(px, py, 2.8, 0, Math.PI*2);
+          ctx.fillStyle='rgba(255,255,255,0.9)';
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // ── Wake/Sleep icons: monochrome, inside outermost edge of segment ──
+      if(showWake) {
+        const iconR = outerR - 9; // inside the segment
+        const iconColor = 'rgba(255,255,255,0.92)';
+
+        function drawSun(ax, ay, r) {
+          ctx.save();
+          ctx.strokeStyle = iconColor;
+          ctx.fillStyle = iconColor;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(ax, ay, r*0.38, 0, Math.PI*2);
+          ctx.fill();
+          const rays = 8;
+          for(let k=0; k<rays; k++) {
+            const a = (k/rays)*Math.PI*2; // starts at right, includes top (k=2 = top)
+            ctx.beginPath();
+            ctx.moveTo(ax+Math.cos(a)*r*0.52, ay+Math.sin(a)*r*0.52);
+            ctx.lineTo(ax+Math.cos(a)*r*0.82, ay+Math.sin(a)*r*0.82);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        function drawMoon(ax, ay, r) {
+          ctx.save();
+          const sz = Math.ceil(r * 4 * DPR);
+          const oc = document.createElement('canvas');
+          oc.width = sz; oc.height = sz;
+          const ox = oc.getContext('2d');
+          ox.scale(DPR, DPR);
+          const cx2 = r*2, cy2 = r*2;
+          ox.fillStyle = iconColor;
+          ox.beginPath();
+          ox.arc(cx2, cy2, r*0.65, 0, Math.PI*2);
+          ox.fill();
+          ox.globalCompositeOperation = 'destination-out';
+          ox.beginPath();
+          ox.arc(cx2 + r*0.38, cy2 - r*0.28, r*0.5, 0, Math.PI*2);
+          ox.fill();
+          ctx.drawImage(oc, ax - r*2, ay - r*2, r*4, r*4);
+          ctx.restore();
+        }
+
+        if(localH === schedule.wake) {
+          const ang = (a0+a1)/2;
+          drawSun(cx+Math.cos(ang)*iconR, cy+Math.sin(ang)*iconR, 7);
+        }
+        const sleepH = schedule.sleep % 24;
+        const lastAwakeH = (sleepH === 0 ? 23 : sleepH - 1);
+        if(localH === lastAwakeH) {
+          const ang = (a0+a1)/2;
+          drawMoon(cx+Math.cos(ang)*iconR, cy+Math.sin(ang)*iconR, 7);
+        }
+      }
+    }
+  }
+
+  // ── Needle: long, matches tz[0] color ──
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx,needleBot);
+  ctx.lineTo(cx,needleTop+4);
+  ctx.strokeStyle=needleColor;
+  ctx.lineWidth=2.5;
+  ctx.lineCap='round';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx,needleTop+4,4,0,Math.PI*2);
+  ctx.fillStyle=needleColor;
+  ctx.fill();
+  ctx.restore();
+
+  // ── Labels: ring color for time, dark for name, well above needle ──
+  const labelY=needleTop-16;
+  const nameY=needleTop-38;
+
+  // Ensure label color is readable (darken if too light)
+  function readableColor(hex) {
+    if (theme.name === '梦幻' && (hex === theme.p[1] || hex === theme.p[2])) {
+      // HSL darken: preserve hue & saturation, push lightness to ~44%
+      const r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+      const mx=Math.max(r,g,b), mn=Math.min(r,g,b), dl=mx-mn;
+      let h=0,s=0,l=(mx+mn)/2;
+      if(dl>0){s=dl/(1-Math.abs(2*l-1));if(mx===r)h=((g-b)/dl+6)%6;else if(mx===g)h=(b-r)/dl+2;else h=(r-g)/dl+4;h/=6;}
+      const tl=0.44, c2=s*(1-Math.abs(2*tl-1)), x2=c2*(1-Math.abs((h*6)%2-1)), m=tl-c2/2;
+      let nr=0,ng=0,nb=0; const hh=h*6;
+      if(hh<1){nr=c2;ng=x2;}else if(hh<2){nr=x2;ng=c2;}else if(hh<3){ng=c2;nb=x2;}else if(hh<4){ng=x2;nb=c2;}else if(hh<5){nr=x2;nb=c2;}else{nr=c2;nb=x2;}
+      const toH=v=>Math.round((v+m)*255).toString(16).padStart(2,'0');
+      return '#'+toH(nr)+toH(ng)+toH(nb);
+    }
+    return hex;
+  }
+
+  function drawLabel(x, timeStr, tzName, color) {
+    ctx.font='600 17px DM Sans';
+    ctx.fillStyle=readableColor(color);
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText(timeStr, x, labelY);
+    ctx.font='500 11px DM Sans';
+    ctx.fillStyle='rgba(40,32,28,0.72)';
+    ctx.fillText(tzName, x, nameY);
+  }
+
+  // ── Labels: main tz always center (3) or right (2), symmetric ──
+  const baseH=Math.floor(currentDialMins/60)%24;
+  const baseM=Math.round(currentDialMins)%60;
+  const n_tz = timezones.length;
+  const mainTime = `${String(baseH).padStart(2,'0')}:${String(baseM).padStart(2,'0')}`;
+
+  function tzTime(i) {
+    const diff = timezones[i].offset - timezones[0].offset;
+    const m = (currentDialMins + diff*60 + 2880) % 1440;
+    return `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(Math.round(m)%60).padStart(2,'0')}`;
+  }
+
+  const spread = outermost * 0.62;
+
+  if(n_tz === 1) {
+    drawLabel(cx, mainTime, tzDisplayName(timezones[0]), theme.p[0]);
+  } else if(n_tz === 2) {
+    drawLabel(cx - spread*0.5, mainTime,  tzDisplayName(timezones[0]), theme.p[0]);
+    drawLabel(cx + spread*0.5, tzTime(1), tzDisplayName(timezones[1]), theme.p[1]);
+  } else {
+    drawLabel(cx - spread, tzTime(1), tzDisplayName(timezones[1]), theme.p[1]);
+    drawLabel(cx,          mainTime,  tzDisplayName(timezones[0]), theme.p[0]);
+    drawLabel(cx + spread, tzTime(2), tzDisplayName(timezones[2]), theme.p[2]);
+  }
+}
+
+// ── Drag — only within the wheel circle ───────────────────────────────────────
+let dragging=false, lastAng=0;
+
+function isInsideWheel(localX, localY) {
+  const n = timezones.length;
+  const baseInner=22, thick=56, step=thick*0.65;
+  const outermost = baseInner + (n-1)*step + thick;
+  const dx = localX - cx, dy = localY - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  return dist <= outermost;
+}
+
+// ── Direct time input ─────────────────────────────────────────────────────────
+function startTimeEdit() {
+  const disp = document.getElementById('dial-display');
+  const inp  = document.getElementById('dial-time-input');
+  const h = Math.floor(currentDialMins/60)%24;
+  const m = Math.round(currentDialMins)%60;
+  inp.value = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  disp.style.display = 'none';
+  inp.style.display  = 'block';
+  inp.focus();
+}
+function applyTimeInput(val) {
+  if(!val) return;
+  const [h,m] = val.split(':').map(Number);
+  const mins = h*60 + m;
+  currentDialMins = mins;
+  document.getElementById('dial-slider').value = mins;
+  rotation = minutesToRotation(mins);
+  updateDialDisplay(mins);
+  draw();
+}
+function endTimeEdit() {
+  document.getElementById('dial-display').style.display = 'block';
+  document.getElementById('dial-time-input').style.display = 'none';
+}
+
+// ── Drag scale effect ─────────────────────────────────────────────────────────
+function setDragScale(active) {
+  const wc = document.getElementById('wheel-container');
+  wc.style.transform = active ? 'scale(1.04)' : 'scale(1)';
+  wc.style.transition = active ? 'transform 0.12s ease' : 'transform 0.2s ease';
+}
+
+canvas.addEventListener('mousedown',e=>{
+  if(!isInsideWheel(e.offsetX, e.offsetY)) return;
+  dragging=true;
+  setDragScale(true);
+  lastAng=Math.atan2(e.offsetY-cy,e.offsetX-cx)*180/Math.PI;
+});
+window.addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  const r=canvas.getBoundingClientRect();
+  const a=Math.atan2(e.clientY-r.top-cy,e.clientX-r.left-cx)*180/Math.PI;
+  rotation+=a-lastAng; lastAng=a;
+  currentDialMins=((-rotation/360*1440)%1440+1440)%1440;
+  document.getElementById('dial-slider').value=Math.round(currentDialMins);
+  updateDialDisplay(currentDialMins);
+  draw();
+});
+window.addEventListener('mouseup',()=>{ dragging=false; setDragScale(false); });
+canvas.addEventListener('touchstart',e=>{
+  const t=e.touches[0],r=canvas.getBoundingClientRect();
+  const localX=t.clientX-r.left, localY=t.clientY-r.top;
+  if(!isInsideWheel(localX, localY)) return;
+  dragging=true;
+  setDragScale(true);
+  lastAng=Math.atan2(localY-cy,localX-cx)*180/Math.PI;
+  e.preventDefault();
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  if(!dragging)return;
+  e.preventDefault();
+  const t=e.touches[0],r=canvas.getBoundingClientRect();
+  const a=Math.atan2(t.clientY-r.top-cy,t.clientX-r.left-cx)*180/Math.PI;
+  rotation+=a-lastAng; lastAng=a;
+  currentDialMins=((-rotation/360*1440)%1440+1440)%1440;
+  document.getElementById('dial-slider').value=Math.round(currentDialMins);
+  updateDialDisplay(currentDialMins);
+  draw();
+},{passive:false});
+canvas.addEventListener('touchend',()=>{ dragging=false; setDragScale(false); });
+
+// ── Dial ──────────────────────────────────────────────────────────────────────
+function minutesToRotation(m){return -(m/1440)*360;}
+function updateDialDisplay(m){
+  const h=Math.floor(m/60)%24, mm=Math.round(m)%60;
+  document.getElementById('dial-display').textContent=
+    `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+function snapToHour(h) {
+  const m = (h * 60) % 1440;
+  currentDialMins = m;
+  document.getElementById('dial-slider').value = m;
+  rotation = minutesToRotation(m);
+  updateDialDisplay(m);
+  draw();
+}
+
+// Proximity snap: if mousedown/touchstart lands within 3% of a tick, snap to it
+(function(){
+  const SNAP_HOURS = [0, 6, 12, 18, 24];
+  const THRESHOLD = 0.03; // fraction of slider width
+  function trySnap(e) {
+    const slider = document.getElementById('dial-slider');
+    const rect = slider.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const mins = frac * 1439;
+    for(const h of SNAP_HOURS) {
+      const hMins = (h * 60) % 1440;
+      if(Math.abs(mins - hMins) / 1439 < THRESHOLD) {
+        e.preventDefault();
+        snapToHour(h);
+        return true;
+      }
+    }
+    return false;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('dial-slider');
+    if(!slider) return;
+    slider.addEventListener('mousedown', trySnap);
+    slider.addEventListener('touchstart', e => trySnap(e), {passive:false});
+  });
+})();
+function onDialChange(val){
+  const m=parseFloat(val); currentDialMins=m;
+  rotation=minutesToRotation(m); updateDialDisplay(m); draw();
+}
+function lastSundayOf(year, month) {
+  // Returns date of last Sunday in given month (0-indexed)
+  const d = new Date(Date.UTC(year, month + 1, 0)); // last day of month
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay()); // back to Sunday
+  return d;
+}
+
+function calcRealDST(now) {
+  const y = now.getUTCFullYear();
+  // EU DST: starts last Sunday March 01:00 UTC, ends last Sunday October 01:00 UTC
+  const start = lastSundayOf(y, 2); // March = month 2
+  start.setUTCHours(1);
+  const end = lastSundayOf(y, 9); // October = month 9
+  end.setUTCHours(1);
+  return now >= start && now < end;
+}
+
+function resetToNow(){
+  const now = new Date();
+  const utcMins = now.getUTCHours()*60 + now.getUTCMinutes();
+
+  const realDST = calcRealDST(now);
+  isDST = realDST;
+  timezones = timezones.map(tz => ({
+    ...tz,
+    offset: tz.dst && isDST ? tz.baseOffset + 1 : tz.baseOffset,
+  }));
+  const dstBtn = document.getElementById('dst-btn');
+  const stdBtn = document.getElementById('std-btn');
+  if(dstBtn) dstBtn.classList.toggle('active', isDST);
+  if(stdBtn) stdBtn.classList.toggle('active', !isDST);
+
+  const tz0offset = timezones[0]?.offset ?? 0;
+  const m = (utcMins + tz0offset*60 + 1440) % 1440;
+  currentDialMins = m;
+  const slider = document.getElementById('dial-slider');
+  if(slider) slider.value = Math.round(m);
+  rotation = minutesToRotation(m);
+  updateDialDisplay(m);
+  renderControls();
+  draw();
+}
+// SVG icon strings for reuse
+// Sun: circle + 8 rays, one pointing straight up (vertical)
+const SVG_SUN = `<svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle">
+  <circle cx="6.5" cy="6.5" r="2.3" fill="currentColor"/>
+  <g stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+    <line x1="6.5" y1="0.5" x2="6.5" y2="2.2"/>
+    <line x1="6.5" y1="10.8" x2="6.5" y2="12.5"/>
+    <line x1="0.5" y1="6.5" x2="2.2" y2="6.5"/>
+    <line x1="10.8" y1="6.5" x2="12.5" y2="6.5"/>
+    <line x1="2.1" y1="2.1" x2="3.3" y2="3.3"/>
+    <line x1="9.7" y1="9.7" x2="10.9" y2="10.9"/>
+    <line x1="10.9" y1="2.1" x2="9.7" y2="3.3"/>
+    <line x1="3.3" y1="9.7" x2="2.1" y2="10.9"/>
+  </g>
+</svg>`;
+
+// Moon: cute round crescent (large circle with bite taken out)
+const SVG_MOON = `<svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle">
+  <path d="M6.5 1a5.5 5.5 0 1 0 5.5 5.5A4 4 0 0 1 6.5 1z"/>
+</svg>`;
+
+const SVG_EYE_OPEN = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+  <path d="M8 3C4.5 3 1.5 8 1.5 8s3 5 6.5 5 6.5-5 6.5-5-3-5-6.5-5zm0 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+  <circle cx="8" cy="8" r="1.5"/>
+</svg>`;
+
+const SVG_EYE_CLOSED = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+  <path d="M2 2l12 12M8 4C4.5 4 1.5 8 1.5 8a9.6 9.6 0 0 0 2.5 2.5M6 4.3A5 5 0 0 1 8 4c3.5 0 6.5 4 6.5 4a9.6 9.6 0 0 1-2.5 2.5"/>
+  <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
+
+let showOverlay = true;
+
+function toggleOverlay() {
+  showNumbers = !showNumbers;
+  const btn = document.getElementById('eye-toggle');
+  btn.classList.toggle('active', showNumbers);
+  btn.innerHTML = showNumbers ? SVG_EYE_OPEN : SVG_EYE_CLOSED;
+  saveSettings();
+  draw();
+}
+
+function toggleWakeIcons() {
+  showWake = !showWake;
+  const btn = document.getElementById('wake-eye-toggle');
+  if(btn) { btn.classList.toggle('active', showWake); btn.innerHTML = showWake ? SVG_EYE_OPEN : SVG_EYE_CLOSED; }
+  saveSettings();
+  draw();
+}
+
+function toggleWake(){ showWake=!showWake; draw(); }
+function toggleNumbers(){ showNumbers=!showNumbers; draw(); }
+
+// ── UI Renders ────────────────────────────────────────────────────────────────
+let tzDragSrc = null;
+let tzDragEl = null;
+let tzDragGhost = null;
+let tzDragStartY = 0;
+
+function initTzDrag(el, listEl) {
+  let pointerId = null;
+
+  el.addEventListener('pointerdown', e => {
+    // exclude delete button
+    if (e.target.closest('.btn-small')) return;
+    e.preventDefault();
+    pointerId = e.pointerId;
+    el.setPointerCapture(e.pointerId);
+    el.style.touchAction = 'none';
+    tzDragEl = el;
+    tzDragSrc = parseInt(el.dataset.idx);
+    tzDragStartY = e.clientY;
+
+    // Create ghost
+    const rect = el.getBoundingClientRect();
+    tzDragGhost = el.cloneNode(true);
+    tzDragGhost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.85;z-index:999;pointer-events:none;background:rgba(255,255,255,0.9);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15)`;
+    document.body.appendChild(tzDragGhost);
+    el.style.opacity = '0.3';
+  });
+
+  el.addEventListener('pointermove', e => {
+    if (!tzDragGhost || e.pointerId !== pointerId) return;
+    e.preventDefault();
+    const dy = e.clientY - tzDragStartY;
+    const rect = el.getBoundingClientRect();
+    tzDragGhost.style.top = (rect.top + dy) + 'px';
+
+    // Find which row we're hovering over
+    const rows = [...listEl.querySelectorAll('.timezone-row')];
+    const target = rows.find(r => {
+      if (r === el) return false;
+      const rb = r.getBoundingClientRect();
+      return e.clientY >= rb.top && e.clientY <= rb.bottom;
+    });
+    if (target) {
+      const targetIdx = parseInt(target.dataset.idx);
+      if (targetIdx !== tzDragSrc) {
+        [timezones[tzDragSrc], timezones[targetIdx]] = [timezones[targetIdx], timezones[tzDragSrc]];
+        [schedules[tzDragSrc], schedules[targetIdx]] = [schedules[targetIdx], schedules[tzDragSrc]];
+        tzDragSrc = targetIdx;
+        // Rebuild list DOM in-place preserving drag state
+        rows.forEach((r, i) => {
+          const tz = timezones[i];
+          const c = theme.p[i % theme.p.length];
+          const dotStyle = i===0
+            ? `width:12px;height:12px;border-radius:50%;background:${c};flex-shrink:0`
+            : `width:12px;height:12px;border-radius:50%;background:transparent;border:3.6px solid ${c};flex-shrink:0`;
+          const delBtn = timezones.length > 1
+            ? `<button class="btn-small" onclick="removeTz(${i})">×</button>`
+            : `<div style="width:22px"></div>`;
+          r.dataset.idx = i;
+          r.innerHTML = `<span class="tz-drag-handle" style="font-size:0.75rem;color:var(--text-light);flex-shrink:0;margin-right:2px;cursor:grab;touch-action:none;user-select:none">⋮⋮</span><div style="${dotStyle}"></div><span class="tz-name" style="flex:none">${tzDisplayName(tz)}</span><span style="flex:1"></span><span class="tz-offset">UTC${tz.offset>=0?'+':''}${tz.offset}</span>${delBtn}`;
+          r.style.opacity = i === tzDragSrc ? '0.3' : '';
+        });
+      }
+    }
+  });
+
+  const endDrag = () => {
+    if (!tzDragGhost) return;
+    tzDragGhost.remove(); tzDragGhost = null;
+    if (tzDragEl) { tzDragEl.style.opacity = ''; tzDragEl.style.touchAction = ''; tzDragEl = null; }
+    tzDragSrc = null;
+    resetToNow();
+    saveSettings(); renderControls(); draw();
+  };
+  el.addEventListener('pointerup', endDrag);
+  el.addEventListener('pointercancel', endDrag);
+}
+
+function renderTzList(){
+  const el=document.getElementById('tz-list'); el.innerHTML='';
+  timezones.forEach((tz,i)=>{
+    const c=theme.p[i%theme.p.length],d=document.createElement('div');
+    d.className='timezone-row';
+    d.dataset.idx=i;
+    d.style.userSelect = 'none';
+    d.style.webkitUserSelect = 'none';
+    const dotStyle = i===0
+      ? `width:12px;height:12px;border-radius:50%;background:${c};flex-shrink:0`
+      : `width:12px;height:12px;border-radius:50%;background:transparent;border:3.6px solid ${c};flex-shrink:0`;
+    const delBtn = timezones.length>1
+      ? `<button class="btn-small" onclick="removeTz(${i})">×</button>`
+      : `<div style="width:22px"></div>`;
+    d.innerHTML=`<span class="tz-drag-handle" style="font-size:0.75rem;color:var(--text-light);flex-shrink:0;margin-right:2px;cursor:grab;touch-action:none;user-select:none">⋮⋮</span><div style="${dotStyle}"></div><span class="tz-name" style="flex:none">${tzDisplayName(tz)}</span><span style="flex:1"></span><span class="tz-offset">UTC${tz.offset>=0?'+':''}${tz.offset}</span>${delBtn}`;
+    el.appendChild(d);
+    initTzDrag(d, el);
+  });
+  const addRow = document.querySelector('.add-tz');
+  if(addRow) addRow.style.display = timezones.length >= 3 ? 'none' : 'flex';
+  const si = document.getElementById('tz-search');
+  if(si) si.placeholder = t('search');
+}
+function renderSleepControls(){
+  const el=document.getElementById('sleep-controls'); el.innerHTML='';
+  timezones.forEach((tz,i)=>{
+    const s=schedules[i]||{wake:7,sleep:23},c=theme.p[i%theme.p.length],d=document.createElement('div');
+    d.className='tz-schedule-block';
+    const dotStyle = i===0
+      ? `width:12px;height:12px;border-radius:50%;background:${c};flex-shrink:0`
+      : `width:12px;height:12px;border-radius:50%;background:transparent;border:3.6px solid ${c};flex-shrink:0`;
+    const wakeLabel = t('wake');
+    const sleepLabel = t('sleep');
+    d.innerHTML=`<div class="tz-schedule-header"><div style="${dotStyle}"></div><span style="font-size:0.82rem;font-weight:500;margin-left:6px">${tzDisplayName(tz)}</span></div><div class="sleep-row"><div class="sleep-label"><span style="display:flex;align-items:center;gap:4px">${SVG_SUN}${wakeLabel}</span><span class="sleep-time-badge" id="wake-val-${i}">${String(s.wake).padStart(2,'0')}:00</span></div><input type="range" class="wake-slider" min="0" max="24" value="${s.wake}" oninput="updateSchedule(${i},'wake',this.value)"></div><div class="sleep-row"><div class="sleep-label"><span style="display:flex;align-items:center;gap:4px">${SVG_MOON}${sleepLabel}</span><span class="sleep-time-badge" id="sleep-val-${i}">${String(s.sleep).padStart(2,'0')}:00</span></div><input type="range" class="sleep-slider" min="0" max="24" value="${s.sleep}" oninput="updateSchedule(${i},'sleep',this.value)"></div>`;
+    el.appendChild(d);
+  });
+}
+function renderThemes(){
+  const el=document.getElementById('themes'); el.innerHTML='';
+  THEMES.forEach(t=>{
+    const b=document.createElement('div');
+    b.className='theme-btn'+(theme===t?' active':''); b.title=t.name;
+    b.innerHTML=`<div class="theme-third" style="background:${t.p[0]}"></div><div class="theme-third" style="background:${t.p[1]}"></div><div class="theme-third" style="background:${t.p[2]}"></div>`;
+    b.onclick=()=>{theme=t;document.documentElement.style.setProperty('--bg',t.bg);document.documentElement.style.setProperty('--card-bg',t.card);document.documentElement.style.setProperty('--accent', _lightAccent(t.p[0]));document.body.style.background=t.bg;renderAll();};
+    el.appendChild(b);
+  });
+}
+function renderLegend(){
+  const el=document.getElementById('legend'); el.innerHTML='';
+  timezones.forEach((tz,i)=>{
+    const c=theme.p[i%theme.p.length];
+    el.innerHTML+=`<div class="legend-item"><div class="legend-swatch" style="background:${c}"></div>${tzDisplayName(tz)}</div>`;
+  });
+}
+function updateSchedule(i,key,val){
+  schedules[i][key]=parseInt(val);
+  document.getElementById(`${key}-val-${i}`).textContent=`${String(parseInt(val)).padStart(2,'0')}:00`;
+  saveSettings();
+  draw();
+}
+function setDST(val) {
+  if(isDST === val) return;
+  isDST = val;
+  timezones = timezones.map(tz => ({
+    ...tz,
+    offset: tz.dst && isDST ? tz.baseOffset + 1 : tz.baseOffset,
+  }));
+  _updateDstToggle();
+  renderAll();
+}
+function _updateDstToggle() {
+  const track = document.getElementById('dst-track');
+  const thumb = document.getElementById('dst-thumb');
+  const lblDst = document.getElementById('dst-label-dst');
+  const lblStd = document.getElementById('dst-label-std');
+  if (!track || !thumb) return;
+  // Measure widths and position thumb
+  requestAnimationFrame(() => {
+    const dstW = lblDst ? lblDst.offsetWidth : 52;
+    const stdW = lblStd ? lblStd.offsetWidth : 52;
+    if (isDST) {
+      thumb.style.width = dstW + 'px';
+      thumb.style.left = '2px';
+    } else {
+      thumb.style.width = stdW + 'px';
+      thumb.style.left = (dstW + 2) + 'px';
+    }
+    if (lblDst) lblDst.classList.toggle('active', isDST);
+    if (lblStd) lblStd.classList.toggle('active', !isDST);
+  });
+}
+// ── Panel order ───────────────────────────────────────────────────────────────
+let lang = 'zh';
+
+const I18N = {
+  zh: {
+    subtitle: '你的时区伴侣',
+    dst: '夏令时', std: '冬令时',
+    hint: '↺ 拖动转盘 · 时间实时联动',
+    dialLabel: '指定当前时间',
+    showNums: '显示时刻', hideNums: '隐藏时刻',
+    showWake: '显示起床', hideWake: '隐藏起床',
+    resetNow: '回到现在',
+    theme: '配色方案', timezone: '时区设置', schedule: '清醒时间',
+    search: '搜索城市 / 地区…',
+    wake: '起床', sleep: '睡觉',
+  },
+  en: {
+    subtitle: 'Time Zone Companion',
+    dst: 'Summer', std: 'Winter',
+    hint: '↺ Drag to rotate · Time syncs live',
+    dialLabel: 'Set current time',
+    showNums: 'Show hours', hideNums: 'Hide hours',
+    showWake: 'Show wake', hideWake: 'Hide wake',
+    resetNow: 'Now',
+    theme: 'Color Theme', timezone: 'Time Zones', schedule: 'Awake Hours',
+    search: 'Search city / region…',
+    wake: 'Wake', sleep: 'Sleep',
+  }
+};
+
+function t(key) { return I18N[lang][key] || key; }
+
+function toggleLang() {
+  lang = lang === 'zh' ? 'en' : 'zh';
+  saveSettings();
+  applyLang();
+  renderControls();
+  draw();
+}
+
+function applyLang() {
+  const L = I18N[lang];
+  const el = id => document.getElementById(id);
+  if(el('brand-sub-text')) el('brand-sub-text').textContent = L.subtitle;
+  if(el('dst-label-dst')) el('dst-label-dst').textContent = L.dst;
+  if(el('dst-label-std')) el('dst-label-std').textContent = L.std;
+  if(el('wheel-hint')) el('wheel-hint').textContent = L.hint;
+  if(el('dial-label')) el('dial-label').textContent = L.dialLabel;
+  if(el('lang-btn')) el('lang-btn').textContent = lang === 'zh' ? 'EN' : '中';
+  if(el('reset-btn')) el('reset-btn').textContent = L.resetNow;
+  if(el('tz-search')) el('tz-search').placeholder = L.search;
+}
+
+let panelOrder = ['theme', 'timezone', 'schedule'];
+
+const SVG_TOP = `<svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+  <rect x="1.5" y="1.5" width="10" height="1.5" rx="0.75"/>
+  <path d="M6.5 11.5V4M3.5 7l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>`;
+
+function panelUpBtn(id, i) {
+  if (i === 0) return '<div style="width:28px"></div>';
+  return `<button class="toggle-btn icon-btn" onclick="movePanelUp('${id}')" title="置顶">${SVG_TOP}</button>`;
+}
+
+function movePanelUp(id) {
+  const idx = panelOrder.indexOf(id);
+  if (idx <= 0) return;
+  panelOrder.splice(idx, 1);
+  panelOrder.unshift(id);
+  renderAll();
+}
+
+function renderControls() {
+  const col = document.getElementById('controls-col');
+  col.innerHTML = '';
+  panelOrder.forEach((id, i) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.panel = id;
+
+    if (id === 'theme') {
+      card.innerHTML = `
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${t('theme')}</span>${panelUpBtn(id, i)}
+        </div>
+        <div class="themes" id="themes"></div>
+        <div class="legend" id="legend"></div>`;
+    } else if (id === 'timezone') {
+      card.innerHTML = `
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${t('timezone')}</span>${panelUpBtn(id, i)}
+        </div>
+        <div id="tz-list"></div>
+        <div class="add-tz" id="add-tz-row">
+          <input id="tz-search" placeholder="${t('search')}" autocomplete="off"
+            oninput="filterTzOptions(this.value)" onfocus="showTzDropdown()" />
+          <button onclick="addTimezoneFromSearch()">+</button>
+          <div id="tz-dropdown" class="tz-dropdown"></div>
+        </div>`;
+    } else if (id === 'schedule') {
+      card.innerHTML = `
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${t('schedule')}</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${panelUpBtn(id, i)}
+            <button class="toggle-btn icon-btn active" id="wake-eye-toggle" onclick="toggleWakeIcons()" title="显示起床/睡觉">${SVG_EYE_OPEN}</button>
+          </div>
+        </div>
+        <div id="sleep-controls"></div>`;
+    }
+    col.appendChild(card);
+  });
+  renderThemes();
+  renderTzList();
+  renderSleepControls();
+  renderLegend();
+  // Restore wake eye state
+  const wakeBtn = document.getElementById('wake-eye-toggle');
+  if(wakeBtn) { wakeBtn.classList.toggle('active', showWake); wakeBtn.innerHTML = showWake ? SVG_EYE_OPEN : SVG_EYE_CLOSED; }
+}
+
+// ── Preset timezone list ──
+const TZ_PRESETS = [
+  // 亚洲
+  {name:'中国 CN',          en:'China',          short:'CN',  base:8,    dst:false},
+  {name:'日本 JP',          en:'Japan',          short:'JP',  base:9,    dst:false},
+  {name:'韩国 KR',          en:'Korea',          short:'KR',  base:9,    dst:false},
+  {name:'新加坡 SG',        en:'Singapore',      short:'SG',  base:8,    dst:false},
+  {name:'香港 HK',          en:'Hong Kong',      short:'HK',  base:8,    dst:false},
+  {name:'台湾 TW',          en:'Taiwan',         short:'TW',  base:8,    dst:false},
+  {name:'泰国 TH',          en:'Thailand',       short:'TH',  base:7,    dst:false},
+  {name:'越南 VN',          en:'Vietnam',        short:'VN',  base:7,    dst:false},
+  {name:'印尼 ID',          en:'Indonesia',      short:'ID',  base:7,    dst:false},
+  {name:'马来西亚 MY',      en:'Malaysia',       short:'MY',  base:8,    dst:false},
+  {name:'印度 IN',          en:'India',          short:'IN',  base:5.5,  dst:false},
+  {name:'巴基斯坦 PK',      en:'Pakistan',       short:'PK',  base:5,    dst:false},
+  {name:'迪拜 AE',          en:'Dubai',          short:'AE',  base:4,    dst:false},
+  {name:'以色列 IL',        en:'Israel',         short:'IL',  base:2,    dst:true},
+  {name:'土耳其 TR',        en:'Turkey',         short:'TR',  base:3,    dst:false},
+  // 欧洲
+  {name:'荷兰 NL',          en:'Netherlands',    short:'NL',  base:1,    dst:true},
+  {name:'法国 FR',          en:'France',         short:'FR',  base:1,    dst:true},
+  {name:'德国 DE',          en:'Germany',        short:'DE',  base:1,    dst:true},
+  {name:'西班牙 ES',        en:'Spain',          short:'ES',  base:1,    dst:true},
+  {name:'意大利 IT',        en:'Italy',          short:'IT',  base:1,    dst:true},
+  {name:'瑞士 CH',          en:'Switzerland',    short:'CH',  base:1,    dst:true},
+  {name:'比利时 BE',        en:'Belgium',        short:'BE',  base:1,    dst:true},
+  {name:'英国 GB',          en:'UK',             short:'GB',  base:0,    dst:true},
+  {name:'爱尔兰 IE',        en:'Ireland',        short:'IE',  base:0,    dst:true},
+  {name:'葡萄牙 PT',        en:'Portugal',       short:'PT',  base:0,    dst:true},
+  {name:'瑞典 SE',          en:'Sweden',         short:'SE',  base:1,    dst:true},
+  {name:'挪威 NO',          en:'Norway',         short:'NO',  base:1,    dst:true},
+  {name:'丹麦 DK',          en:'Denmark',        short:'DK',  base:1,    dst:true},
+  {name:'芬兰 FI',          en:'Finland',        short:'FI',  base:2,    dst:true},
+  {name:'波兰 PL',          en:'Poland',         short:'PL',  base:1,    dst:true},
+  {name:'俄罗斯 RU',        en:'Russia',         short:'RU',  base:3,    dst:false},
+  // 美洲
+  {name:'美东 ET',          en:'US East',        short:'ET',  base:-5,   dst:true},
+  {name:'美中 CT',          en:'US Central',     short:'CT',  base:-6,   dst:true},
+  {name:'美山 MT',          en:'US Mountain',    short:'MT',  base:-7,   dst:true},
+  {name:'美西 PT',          en:'US West',        short:'PT',  base:-8,   dst:true},
+  {name:'加东 CA-E',        en:'Canada East',    short:'CA',  base:-5,   dst:true},
+  {name:'加西 CA-W',        en:'Canada West',    short:'CA',  base:-8,   dst:true},
+  {name:'墨西哥 MX',        en:'Mexico',         short:'MX',  base:-6,   dst:true},
+  {name:'巴西 BR',          en:'Brazil',         short:'BR',  base:-3,   dst:false},
+  {name:'阿根廷 AR',        en:'Argentina',      short:'AR',  base:-3,   dst:false},
+  // 大洋洲
+  {name:'澳大利亚东 AU-E',  en:'Australia East', short:'AU',  base:10,   dst:true},
+  {name:'澳大利亚西 AU-W',  en:'Australia West', short:'AU',  base:8,    dst:false},
+  {name:'新西兰 NZ',        en:'New Zealand',    short:'NZ',  base:12,   dst:true},
+  // 非洲
+  {name:'南非 ZA',          en:'South Africa',   short:'ZA',  base:2,    dst:false},
+  {name:'尼日利亚 NG',      en:'Nigeria',        short:'NG',  base:1,    dst:false},
+  {name:'埃及 EG',          en:'Egypt',          short:'EG',  base:2,    dst:false},
+  {name:'肯尼亚 KE',        en:'Kenya',          short:'KE',  base:3,    dst:false},
+];
+
+// Helper: get display name based on current lang
+function tzDisplayName(tz) {
+  // tz may have .en if from preset, otherwise fallback to .name
+  return lang === 'en' && tz.en ? tz.en : tz.name;
+}
+
+let selectedPreset = null;
+
+function filterTzOptions(query) {
+  const dd = document.getElementById('tz-dropdown');
+  const q = query.trim().toLowerCase();
+  const filtered = q ? TZ_PRESETS.filter(p =>
+    p.name.toLowerCase().includes(q) || p.short.toLowerCase().includes(q)
+  ) : TZ_PRESETS;
+  renderDropdown(filtered);
+  dd.style.display = filtered.length ? 'block' : 'none';
+}
+
+function renderDropdown(list) {
+  const dd = document.getElementById('tz-dropdown');
+  dd.innerHTML = '';
+  list.forEach(p => {
+    const offset = p.dst && isDST ? p.base + 1 : p.base;
+    const offStr = `UTC${offset >= 0 ? '+' : ''}${offset}${p.dst ? ' ☀︎' : ''}`;
+    const displayName = lang === 'en' && p.en ? p.en : p.name;
+    const div = document.createElement('div');
+    div.className = 'tz-option';
+    div.innerHTML = `<span class="tz-option-name">${displayName}</span><span class="tz-option-meta">${offStr}</span>`;
+    div.onclick = () => {
+      selectedPreset = p;
+      document.getElementById('tz-search').value = displayName;
+      dd.style.display = 'none';
+    };
+    dd.appendChild(div);
+  });
+}
+
+function filterTzOptions(query) {
+  const dd = document.getElementById('tz-dropdown');
+  const q = query.trim().toLowerCase();
+  const filtered = q ? TZ_PRESETS.filter(p => {
+    const display = lang === 'en' && p.en ? p.en : p.name;
+    return display.toLowerCase().includes(q) || p.short.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || (p.en && p.en.toLowerCase().includes(q));
+  }) : TZ_PRESETS;
+  renderDropdown(filtered);
+  dd.style.display = filtered.length ? 'block' : 'none';
+}
+
+function showTzDropdown() {
+  filterTzOptions(document.getElementById('tz-search').value || '');
+}
+
+document.addEventListener('click', e => {
+  if(!e.target.closest('#add-tz-row')) {
+    document.getElementById('tz-dropdown').style.display = 'none';
+  }
+});
+
+function addTimezoneFromSearch() {
+  if(!selectedPreset) return;
+  if(timezones.length >= 3) return;
+  const p = selectedPreset;
+  const offset = p.dst && isDST ? p.base + 1 : p.base;
+  timezones.push({name: p.name, en: p.en, offset, dst: p.dst, baseOffset: p.base});
+  schedules.push({wake:7, sleep:23});
+  document.getElementById('tz-search').value = '';
+  selectedPreset = null;
+  resetToNow();
+  renderAll();
+}
+function moveTzTop(i){
+  if(i<=0) return;
+  const tz = timezones.splice(i,1)[0];
+  const sc = schedules.splice(i,1)[0];
+  timezones.unshift(tz);
+  schedules.unshift(sc);
+  renderAll();
+}
+function removeTz(i){
+  if(timezones.length <= 1) return;
+  timezones.splice(i,1); schedules.splice(i,1); renderAll();
+}
+function renderAll(){ saveSettings(); renderControls(); applyLang(); draw(); }
+
+// ── Storage via localForage (IndexedDB → WebSQL → localStorage auto-fallback) ─
+const STORE_KEY = 'around_v4';
+localforage.config({ name: 'AroundApp', storeName: 'settings' });
+
+// Blend hex color with white by amount (0=original, 1=white)
+function _lightenHex(hex, amt) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  const mix = v => Math.round(v + (255-v)*amt).toString(16).padStart(2,'0');
+  return '#' + mix(r) + mix(g) + mix(b);
+}
+
+function saveSettings() {
+  const data = {
+    v: 4,
+    themeIdx: THEMES.indexOf(theme),
+    timezones: timezones.map(tz => ({name:tz.name, en:tz.en||'', offset:tz.offset, dst:tz.dst, baseOffset:tz.baseOffset})),
+    schedules: schedules.slice(0, timezones.length).map(s => ({wake: s?.wake ?? 7, sleep: s?.sleep ?? 23})),
+    lang,
+    panelOrder: [...panelOrder],
+    showNumbers,
+    showWake,
+  };
+  localforage.setItem(STORE_KEY, data).catch(() => {});
+}
+
+function _applySettings(s) {
+  if (!s || s.v !== 4) return false;
+  if (typeof s.themeIdx === 'number' && s.themeIdx >= 0 && s.themeIdx < THEMES.length) {
+    theme = THEMES[s.themeIdx];
+    document.documentElement.style.setProperty('--bg', theme.bg);
+    document.documentElement.style.setProperty('--card-bg', theme.card);
+    document.documentElement.style.setProperty('--accent', _lightAccent(theme.p[0]));
+    document.body.style.background = theme.bg;
+  }
+  if (Array.isArray(s.timezones) && s.timezones.length >= 1) {
+    const realDST = calcRealDST(new Date());
+    isDST = realDST;
+    timezones = s.timezones.map(tz => ({
+      ...tz,
+      offset: tz.dst && realDST ? tz.baseOffset + 1 : tz.baseOffset,
+    }));
+    schedules = timezones.map((_,i) =>
+      (s.schedules && s.schedules[i]) ? {wake: s.schedules[i].wake, sleep: s.schedules[i].sleep} : {wake:7, sleep:23}
+    );
+  }
+  if (s.lang === 'en' || s.lang === 'zh') lang = s.lang;
+  if (Array.isArray(s.panelOrder) && s.panelOrder.length === 3) panelOrder = s.panelOrder;
+  if (typeof s.showNumbers === 'boolean') showNumbers = s.showNumbers;
+  if (typeof s.showWake === 'boolean') showWake = s.showWake;
+  return true;
+}
+
+function _boot() {
+  resetToNow();
+  setTimeout(_updateDstToggle, 50);
+  document.fonts.ready.then(() => {
+    ctx.font = '600 17px DM Sans';
+    ctx.font = '500 11px DM Sans';
+    renderAll();
+  });
+}
+
+localforage.getItem(STORE_KEY).then(data => {
+  _applySettings(data);
+  _boot();
+}).catch(() => _boot());
+
+// ── Splash ────────────────────────────────────────────────────────────────────
+function _playSplashTone() {
+  if (sessionStorage.getItem('around_played')) return;
+  sessionStorage.setItem('around_played', '1');
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const play = (freq, t0, dur, vol) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(vol, t0 + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      o.start(t0); o.stop(t0 + dur);
+    };
+    const t = ac.currentTime + 0.05;
+    play(523.25, t,        0.65, 0.12);
+    play(659.25, t + 0.08, 0.58, 0.09);
+    play(783.99, t + 0.18, 0.52, 0.07);
+  } catch(e) {}
+}
+function _dismissSplash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  el.classList.add('fade-out');
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 700);
+}
+(function _initSplash() {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === 'running') {
+      setTimeout(_playSplashTone, 150);
+    } else {
+      const tryPlay = () => _playSplashTone();
+      document.addEventListener('touchstart', tryPlay, {once:true});
+      document.addEventListener('click',      tryPlay, {once:true});
+    }
+    ac.close();
+  } catch(e) {}
+  setTimeout(_dismissSplash, 1350);
+})();
+</script>
+</body>
+</html>
